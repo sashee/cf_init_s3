@@ -5,7 +5,6 @@ const sendResponse = (event, context, responseStatus, responseData, Bucket, Key)
 	return new Promise((res, rej) => {
 		var responseBody = JSON.stringify({
 			Status: responseStatus,
-			Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
 			PhysicalResourceId: `${Bucket}-${event.LogicalResourceId}-${Key}`,
 			StackId: event.StackId,
 			RequestId: event.RequestId,
@@ -61,15 +60,15 @@ const cleanup = async (Bucket, Key) => {
 	}).promise();
 }
 
-const getKey = (bucket, logicalResourceId, keyPrefix) => {
+const getKey = (bucket, logicalResourceId, keyPrefix, keySuffix) => {
 	const hash = require('crypto').createHash('md5').update(`${bucket}-${logicalResourceId}-${keyPrefix}`).digest("hex");
-	return `${keyPrefix}-${hash}`;
+	return `${keyPrefix}-${hash}${keySuffix}`;
 }
 
 exports.index = async (event, context) => {
-	const {Bucket, KeyPrefix, Content} = event.ResourceProperties;
+	const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
 
-	const Key = getKey(Bucket, event.LogicalResourceId, KeyPrefix);
+	const Key = getKey(Bucket, event.LogicalResourceId, KeyPrefix, KeySuffix);
 
 	try {
 		console.log("REQUEST RECEIVED:\n" + JSON.stringify(event));
@@ -82,9 +81,9 @@ exports.index = async (event, context) => {
 		}
 
 		if (event.RequestType === "Update") {
-			const {Bucket: oldBucket, KeyPrefix: oldKeyPrefix} = event.OldResourceProperties;
+			const {Bucket: oldBucket, KeyPrefix: oldKeyPrefix, KeySuffix: oldKeySuffix} = event.OldResourceProperties;
 
-			const oldKey = getKey(oldBucket, event.logicalResourceId, oldKeyPrefix);
+			const oldKey = getKey(oldBucket, event.logicalResourceId, oldKeyPrefix, oldKeySuffix);
 
 			await cleanup(oldBucket, oldKey);
 		}
@@ -94,11 +93,13 @@ exports.index = async (event, context) => {
 			Key
 		}).promise();
 
-		await s3.putObject({
+		const res = await s3.putObject({
 			Body: Buffer.from(Content, 'binary'),
 			Bucket,
 			Key
 		}).promise();
+
+		console.log(JSON.stringify(res));
 
 		await sendResponse(event, context, "SUCCESS", {Key}, Bucket, Key);
 	}catch(e) {

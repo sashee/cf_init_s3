@@ -44,8 +44,9 @@ Resources:
     Properties:
       ServiceToken: !GetAtt S3FileLambdaFunction.Arn
       Bucket: !Ref Bucket
-      KeyPrefix: "example"
-      Content: "testxxxx"
+      KeyPrefix: "examplekey"
+      KeySuffix: ".txt"
+      Content: "Hello world"
   Bucket:
     Type: AWS::S3::Bucket
 Outputs:
