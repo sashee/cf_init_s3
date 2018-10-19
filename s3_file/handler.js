@@ -61,7 +61,7 @@ const cleanup = async (Bucket, Key) => {
 }
 
 const getKey = (bucket, logicalResourceId, keyPrefix, keySuffix) => {
-	const hash = require('crypto').createHash('md5').update(`${bucket}-${logicalResourceId}-${keyPrefix}`).digest("hex");
+	const hash = require('crypto').createHash('md5').update(`${bucket}-${logicalResourceId}-${keyPrefix}-${keySuffix}`).digest("hex");
 	return `${keyPrefix}-${hash}${keySuffix}`;
 }
 
