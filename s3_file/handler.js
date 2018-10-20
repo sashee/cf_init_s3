@@ -1,15 +1,19 @@
 const AWS = require("aws-sdk");
 const s3 = new AWS.S3();
 
-const sendResponse = (event, context, responseStatus, responseData, Bucket, Key) => {
+// https://gist.github.com/6174/6062387
+const rand = () =>  Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+const sendResponse = (event, context, responseStatus, Key, id) => {
 	return new Promise((res, rej) => {
 		var responseBody = JSON.stringify({
 			Status: responseStatus,
-			PhysicalResourceId: `${Bucket}-${event.LogicalResourceId}-${Key}`,
+			PhysicalResourceId: id,
+			Reason: "See the details in CloudWatch Log Stream: " + context.logStreamName,
 			StackId: event.StackId,
 			RequestId: event.RequestId,
 			LogicalResourceId: event.LogicalResourceId,
-			Data: responseData
+			Data: {Key}
 		});
 	
 		console.log("RESPONSE BODY:\n", responseBody);
@@ -60,15 +64,15 @@ const cleanup = async (Bucket, Key) => {
 	}).promise();
 }
 
-const getKey = (bucket, logicalResourceId, keyPrefix, keySuffix) => {
-	const hash = require('crypto').createHash('md5').update(`${bucket}-${logicalResourceId}-${keyPrefix}-${keySuffix}`).digest("hex");
-	return `${keyPrefix}-${hash}${keySuffix}`;
+const getKey = (keyPrefix, keySuffix, id) => {
+	return `${keyPrefix}-${id}${keySuffix}`;
 }
 
 exports.index = async (event, context) => {
 	const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
 
-	const Key = getKey(Bucket, event.LogicalResourceId, KeyPrefix, KeySuffix);
+	const id = event.PhysicalResourceId || rand();
+	const Key = getKey(KeyPrefix, KeySuffix, id);
 
 	try {
 		console.log("REQUEST RECEIVED:\n" + JSON.stringify(event));
@@ -76,15 +80,14 @@ exports.index = async (event, context) => {
 		if (event.RequestType == "Delete") {
 			await cleanup(Bucket, Key);
 
-			await sendResponse(event, context, "SUCCESS", {}, Bucket, Key);
+			await sendResponse(event, context, "SUCCESS", Key, id);
 			return;
 		}
 
 		if (event.RequestType === "Update") {
 			const {Bucket: oldBucket, KeyPrefix: oldKeyPrefix, KeySuffix: oldKeySuffix} = event.OldResourceProperties;
 
-			const oldKey = getKey(oldBucket, event.logicalResourceId, oldKeyPrefix, oldKeySuffix);
-
+			const oldKey = getKey(oldKeyPrefix, oldKeySuffix, id);
 			await cleanup(oldBucket, oldKey);
 		}
 
@@ -101,8 +104,9 @@ exports.index = async (event, context) => {
 
 		console.log(JSON.stringify(res));
 
-		await sendResponse(event, context, "SUCCESS", {Key}, Bucket, Key);
+		await sendResponse(event, context, "SUCCESS", Key, id);
 	}catch(e) {
-		await sendResponse(event, context, "FAILURE", {}, Bucket, Key);
+		console.error(e);
+		await sendResponse(event, context, "FAILURE", Key, id);
 	}
 };
