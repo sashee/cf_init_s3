@@ -57,13 +57,6 @@ const sendResponse = (event, context, responseStatus, Key, id) => {
 	});
 }
 
-const cleanup = async (Bucket, Key) => {
-	await s3.deleteObject({
-		Bucket,
-		Key
-	}).promise();
-}
-
 const getKey = (keyPrefix, keySuffix, id) => {
 	return `${keyPrefix}-${id}${keySuffix}`;
 }
@@ -71,42 +64,43 @@ const getKey = (keyPrefix, keySuffix, id) => {
 exports.index = async (event, context) => {
 	const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
 
-	const id = event.PhysicalResourceId || rand();
-	const Key = getKey(KeyPrefix, KeySuffix, id);
-
 	try {
 		console.log("REQUEST RECEIVED:\n" + JSON.stringify(event));
 
-		if (event.RequestType == "Delete") {
-			await cleanup(Bucket, Key);
+		const {Key, id} = await (async () => {
+			if (event.RequestType == "Delete") {
+				const id = event.PhysicalResourceId;
+				const Key = getKey(KeyPrefix, KeySuffix, id);
 
-			await sendResponse(event, context, "SUCCESS", Key, id);
-			return;
-		}
+				await s3.deleteObject({
+					Bucket,
+					Key
+				}).promise();
 
-		if (event.RequestType === "Update") {
-			const {Bucket: oldBucket, KeyPrefix: oldKeyPrefix, KeySuffix: oldKeySuffix} = event.OldResourceProperties;
+				return {
+					Key,
+					id,
+				};
+			} else {
+				const id = rand();
+				const Key = getKey(KeyPrefix, KeySuffix, id);
 
-			const oldKey = getKey(oldKeyPrefix, oldKeySuffix, id);
-			await cleanup(oldBucket, oldKey);
-		}
+				await s3.putObject({
+					Body: Buffer.from(Content, 'binary'),
+					Bucket,
+					Key
+				}).promise();
 
-		await s3.deleteObject({
-			Bucket,
-			Key
-		}).promise();
-
-		const res = await s3.putObject({
-			Body: Buffer.from(Content, 'binary'),
-			Bucket,
-			Key
-		}).promise();
-
-		console.log(JSON.stringify(res));
+				return {
+					Key,
+					id,
+				};
+			}
+		})();
 
 		await sendResponse(event, context, "SUCCESS", Key, id);
 	}catch(e) {
 		console.error(e);
-		await sendResponse(event, context, "FAILURE", Key, id);
+		await sendResponse(event, context, "FAILURE");
 	}
 };
