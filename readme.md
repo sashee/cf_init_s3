@@ -22,7 +22,7 @@ Update requires: Replacement
 
 ### KeyPrefix
 
-The key is constructed with the KeyPrefix, the KeySuffix, and a pseudo-random part: {KeyPrefix}-{Random}-{KeySuffix}.
+The key is constructed with the KeyPrefix, the KeySuffix, and a pseudo-random part: {KeyPrefix}-{Random}{KeySuffix}.
 
 Required: yes
 
