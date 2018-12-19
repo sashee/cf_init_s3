@@ -1,9 +1,6 @@
 const AWS = require("aws-sdk");
 const s3 = new AWS.S3();
 
-// https://gist.github.com/6174/6062387
-const rand = () =>  Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
 const sendResponse = (event, context, responseStatus, Key, id) => {
 	return new Promise((res, rej) => {
 		var responseBody = JSON.stringify({
@@ -61,6 +58,10 @@ const getKey = (keyPrefix, keySuffix, id) => {
 	return `${keyPrefix}-${id}${keySuffix}`;
 }
 
+const getId = (StackId, LogicalResourceId, Bucket, KeyPrefix, KeySuffix) => {
+	return require("crypto").createHash("sha1").update(`${StackId};${LogicalResourceId};${Bucket};${KeyPrefix};${KeySuffix}`).digest("hex").substring(0, 7);
+}
+
 exports.index = async (event, context) => {
 	const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
 
@@ -68,7 +69,7 @@ exports.index = async (event, context) => {
 		console.log("REQUEST RECEIVED:\n" + JSON.stringify(event));
 
 		const {Key, id} = await (async () => {
-			if (event.RequestType == "Delete") {
+			if (event.RequestType === "Delete") {
 				const id = event.PhysicalResourceId;
 				const Key = getKey(KeyPrefix, KeySuffix, id);
 
@@ -82,7 +83,7 @@ exports.index = async (event, context) => {
 					id,
 				};
 			} else {
-				const id = rand();
+				const id = event.RequestType === "Create" || ["Bucket", "KeyPrefix", "KeySuffix"].some((parameter) => event.ResourceProperties[parameter] !== event.OldResourceProperties[parameter]) ? getId(event.StackId, event.LogicalResourceId, Bucket, KeyPrefix, KeySuffix) : event.PhysicalResourceId;
 				const Key = getKey(KeyPrefix, KeySuffix, id);
 
 				await s3.putObject({
@@ -101,6 +102,6 @@ exports.index = async (event, context) => {
 		await sendResponse(event, context, "SUCCESS", Key, id);
 	}catch(e) {
 		console.error(e);
-		await sendResponse(event, context, "FAILURE");
+		await sendResponse(event, context, "FAILED");
 	}
 };
