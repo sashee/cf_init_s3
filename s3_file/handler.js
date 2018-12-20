@@ -2,14 +2,10 @@ const AWS = require("aws-sdk");
 const s3 = new AWS.S3();
 const response = require("./cfn-response");
 
-const replaceParameters = ["Bucket", "KeyPrefix", "KeySuffix"];
+const getKey = (StackId, LogicalResourceId, KeyPrefix, KeySuffix) => {
+	const randomPart = require("crypto").createHash("sha1").update([StackId, LogicalResourceId].join(";")).digest("hex").substring(0, 7);
 
-const getKey = (keyPrefix, keySuffix, id) => {
-	return `${keyPrefix}-${id}${keySuffix}`;
-}
-
-const getId = (StackId, LogicalResourceId, ...properties) => {
-	return require("crypto").createHash("sha1").update([StackId, LogicalResourceId, ...properties].join(";")).digest("hex").substring(0, 7);
+	return `${KeyPrefix}-${randomPart}${KeySuffix}`;
 }
 
 exports.index = (event, context) => {
@@ -19,8 +15,7 @@ exports.index = (event, context) => {
 
 			const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
 
-			const id = getId(event.StackId, event.LogicalResourceId, ...replaceParameters.map((parameter) => event.ResourceProperties[parameter]));
-			const Key = getKey(KeyPrefix, KeySuffix, id);
+			const Key = getKey(event.StackId, event.LogicalResourceId, KeyPrefix, KeySuffix);
 
 			if (event.RequestType === "Delete") {
 				await s3.deleteObject({
@@ -35,7 +30,7 @@ exports.index = (event, context) => {
 				}).promise();
 			}
 
-			response.send(event, context, response.SUCCESS, {Key}, id);
+			response.send(event, context, response.SUCCESS, {Key}, `${Bucket}/${Key}`);
 		}catch(e) {
 			console.error(e);
 			response.send(event, context, response.FAILED);
