@@ -14,41 +14,26 @@ const getId = (StackId, LogicalResourceId, ...properties) => {
 
 exports.index = (event, context) => {
 	(async () => {
-		const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
-
 		try {
 			console.log("REQUEST RECEIVED:\n" + JSON.stringify(event));
 
-			const {Key, id} = await (async () => {
-				if (event.RequestType === "Delete") {
-					const id = event.PhysicalResourceId;
-					const Key = getKey(KeyPrefix, KeySuffix, id);
+			const {Bucket, KeyPrefix, KeySuffix, Content} = event.ResourceProperties;
 
-					await s3.deleteObject({
-						Bucket,
-						Key
-					}).promise();
+			const id = getId(event.StackId, event.LogicalResourceId, ...replaceParameters.map((parameter) => event.ResourceProperties[parameter]));
+			const Key = getKey(KeyPrefix, KeySuffix, id);
 
-					return {
-						Key,
-						id,
-					};
-				} else {
-					const id = event.RequestType === "Create" || replaceParameters.some((parameter) => event.ResourceProperties[parameter] !== event.OldResourceProperties[parameter]) ? getId(event.StackId, event.LogicalResourceId, ...replaceParameters.map((parameter) => event.ResourceProperties[parameter])) : event.PhysicalResourceId;
-					const Key = getKey(KeyPrefix, KeySuffix, id);
-
-					await s3.putObject({
-						Body: Buffer.from(Content, 'binary'),
-						Bucket,
-						Key
-					}).promise();
-
-					return {
-						Key,
-						id,
-					};
-				}
-			})();
+			if (event.RequestType === "Delete") {
+				await s3.deleteObject({
+					Bucket,
+					Key
+				}).promise();
+			} else {
+				await s3.putObject({
+					Body: Buffer.from(Content, 'binary'),
+					Bucket,
+					Key
+				}).promise();
+			}
 
 			response.send(event, context, response.SUCCESS, {Key}, id);
 		}catch(e) {
